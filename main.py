@@ -1,0 +1,126 @@
+import requests
+import sys
+import time
+from urllib.parse import urlparse
+
+def normalize_url(raw_url):
+    """
+    Приводит сырой ввод к стандартному виду для проверки HTTP -> HTTPS.
+    """
+    raw_url = raw_url.strip()
+    parsed = urlparse(raw_url)
+    
+    # Если схема не указана, добавляем http://
+    if not parsed.scheme:
+        return f"http://{raw_url}"
+    
+    # Если схема уже есть, возвращаем как есть (но для теста будем использовать http:// вариант)
+    return raw_url
+
+def check_http_to_https_redirect(domain_input):
+    """
+    Проверяет, перенаправляет ли HTTP-версия сайта на HTTPS.
+    Возвращает (статус, сообщение, итоговый URL)
+    """
+    # Приводим к стандартному виду
+    normalized = normalize_url(domain_input)
+    parsed = urlparse(normalized)
+    
+    # Формируем HTTP URL для проверки
+    http_url = f"http://{parsed.netloc or parsed.path}"
+    https_url = f"https://{parsed.netloc or parsed.path}"
+    
+    try:
+        # Отключаем проверку SSL-сертификата и следуем редиректам
+        response = requests.get(http_url, timeout=10, allow_redirects=True, verify=False)
+        
+        # Получаем финальный URL после всех редиректов
+        final_url = response.url
+        
+        # Проверяем, ведёт ли финальный URL на HTTPS
+        if final_url.startswith("https://"):
+            # Дополнительно проверяем, что это не тот же URL, что и исходный http
+            if final_url != http_url:
+                return (True, f"✅ РЕДИРЕКТ: {http_url} -> {final_url}", final_url)
+            else:
+                return (False, f"⚠️ НЕТ РЕДИРЕКТА: {http_url} остаётся на HTTP", final_url)
+        else:
+            return (False, f"❌ НЕТ РЕДИРЕКТА НА HTTPS: {http_url} -> {final_url}", final_url)
+            
+    except requests.exceptions.Timeout:
+        return (False, f"⏱️ ТАЙМАУТ: {http_url} не отвечает за 10 секунд", None)
+    except requests.exceptions.ConnectionError:
+        return (False, f"🔌 ОШИБКА СОЕДИНЕНИЯ: {http_url} недоступен", None)
+    except Exception as e:
+        return (False, f"⚠️ ОШИБКА: {http_url} -> {str(e)}", None)
+
+def main():
+    print("=" * 70)
+    print("ПРОВЕРКА ПЕРЕАДРЕСАЦИИ HTTP -> HTTPS")
+    print("=" * 70)
+    print("Введите список сайтов через пробел (например: domain.ru http://example.com https://www.site.ru)")
+    print()
+    
+    # Читаем ввод с клавиатуры
+    user_input = input("Сайты: ").strip()
+    
+    if not user_input:
+        print("❌ Ошибка: вы не ввели ни одного сайта.")
+        sys.exit(1)
+    
+    # Разбиваем по пробелам
+    raw_domains = user_input.split()
+    
+    print("\n" + "-" * 70)
+    print("РЕЗУЛЬТАТЫ ПРОВЕРКИ:")
+    print("-" * 70)
+    
+    results = []
+    redirect_count = 0
+    total = len(raw_domains)
+    
+    for idx, domain in enumerate(raw_domains, 1):
+        print(f"\n[{idx}/{total}] Проверка: {domain}")
+        status, message, final_url = check_http_to_https_redirect(domain)
+        print(f"  {message}")
+        
+        if status:
+            redirect_count += 1
+        
+        results.append({
+            "original": domain,
+            "has_redirect": status,
+            "message": message,
+            "final_url": final_url
+        })
+        
+        # Небольшая задержка между запросами
+        time.sleep(0.5)
+    
+    # Вывод итоговой статистики
+    print("\n" + "=" * 70)
+    print("СТАТИСТИКА:")
+    print("=" * 70)
+    print(f"Всего сайтов: {total}")
+    print(f"✅ Есть редирект HTTP -> HTTPS: {redirect_count}")
+    print(f"❌ Нет редиректа / ошибка: {total - redirect_count}")
+    
+    if redirect_count == total:
+        print("\n🎉 Отлично! Все сайты правильно перенаправляют с HTTP на HTTPS.")
+    elif redirect_count > 0:
+        print("\n⚠️ Некоторые сайты не перенаправляют на HTTPS. Рекомендуется исправить.")
+    else:
+        print("\n❌ Ни один сайт не перенаправляет с HTTP на HTTPS!")
+    
+    print("\n" + "=" * 70)
+
+if __name__ == "__main__":
+    # Отключаем предупреждения о небезопасных HTTPS-запросах (из-за verify=False)
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Проверка прервана пользователем.")
+        sys.exit(0)
