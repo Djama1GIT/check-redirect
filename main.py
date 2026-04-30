@@ -131,7 +131,9 @@ def main():
         print("\n❌ Ни один сайт не перенаправляет с HTTP на HTTPS!")
     
     # Дополнительный вывод: список сайтов без редиректа
-    if redirect_count < total:
+    failed_sites = [r["original"] for r in results if not r["has_redirect"]]
+
+    if failed_sites:
         print("\n" + "-" * 70)
         print("САЙТЫ БЕЗ РЕДИРЕКТА НА HTTPS:")
         print("-" * 70)
@@ -139,8 +141,49 @@ def main():
             if not result["has_redirect"]:
                 print(f"  • {result['original']}")
                 print(f"    {result['message']}")
-    
+
     print("\n" + "=" * 70)
+
+    if not failed_sites:
+        return
+    
+    while True:
+        command = input("\nВведите команду (re / stop): ").strip().lower()
+
+        if command == "stop":
+            print("⛔ Завершение программы.")
+            break
+
+        elif command == "re":
+            if not failed_sites:
+                print("✅ Нет сайтов для повторной проверки.")
+                continue
+
+            print("\n🔁 Повторная проверка сайтов без редиректа...")
+            new_failed = []
+
+            for idx, domain in enumerate(failed_sites, 1):
+                print(f"\n[{idx}/{len(failed_sites)}] Проверка: {domain}")
+                status, message, final_url = check_http_to_https_redirect(domain)
+                print(f"  {message}")
+
+                if not status:
+                    new_failed.append(domain)
+
+                time.sleep(0.5)
+
+            failed_sites = new_failed
+
+            if not failed_sites:
+                print("\n🎉 Все сайты теперь имеют редирект на HTTPS!")
+                return
+            else:
+                print("\n⚠️ Всё ещё без редиректа:")
+                for site in failed_sites:
+                    print(f"  • {site}")
+
+        else:
+            print("❓ Неизвестная команда. Используйте 're' или 'stop'.")
 
 if __name__ == "__main__":
     # Отключаем предупреждения о небезопасных HTTPS-запросах (из-за verify=False)
