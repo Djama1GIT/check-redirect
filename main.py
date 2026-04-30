@@ -28,7 +28,6 @@ def check_http_to_https_redirect(domain_input):
     
     # Формируем HTTP URL для проверки
     http_url = f"http://{parsed.netloc or parsed.path}"
-    https_url = f"https://{parsed.netloc or parsed.path}"
     
     try:
         # Отключаем проверку SSL-сертификата и следуем редиректам
@@ -39,11 +38,7 @@ def check_http_to_https_redirect(domain_input):
         
         # Проверяем, ведёт ли финальный URL на HTTPS
         if final_url.startswith("https://"):
-            # Дополнительно проверяем, что это не тот же URL, что и исходный http
-            if final_url != http_url:
-                return (True, f"✅ РЕДИРЕКТ: {http_url} -> {final_url}", final_url)
-            else:
-                return (False, f"⚠️ НЕТ РЕДИРЕКТА: {http_url} остаётся на HTTP", final_url)
+            return (True, f"✅ РЕДИРЕКТ: {http_url} -> {final_url}", final_url)
         else:
             return (False, f"❌ НЕТ РЕДИРЕКТА НА HTTPS: {http_url} -> {final_url}", final_url)
             
@@ -58,28 +53,52 @@ def main():
     print("=" * 70)
     print("ПРОВЕРКА ПЕРЕАДРЕСАЦИИ HTTP -> HTTPS")
     print("=" * 70)
-    print("Введите список сайтов через пробел (например: domain.ru http://example.com https://www.site.ru)")
+    print("Вводите сайты по одному на каждой новой строке.")
+    print("Для завершения ввода введите слово 'конец' (без кавычек)")
     print()
+    print("Примеры ввода:")
+    print("  google.ru")
+    print("  http://yandex.ru")
+    print("  https://www.github.com")
+    print("  example.com")
+    print()
+    print("-" * 70)
     
-    # Читаем ввод с клавиатуры
-    user_input = input("Сайты: ").strip()
+    # Список для хранения введённых сайтов
+    domains = []
     
-    if not user_input:
-        print("❌ Ошибка: вы не ввели ни одного сайта.")
+    # Бесконечный цикл для построчного ввода
+    line_number = 1
+    while True:
+        user_input = input(f"Сайт #{line_number}: ").strip()
+        
+        # Проверка на стоп-слово
+        if user_input.lower() == "конец":
+            break
+        
+        # Пропускаем пустые строки
+        if not user_input:
+            print("  ⚠️ Пустая строка игнорируется. Введите сайт или 'конец'")
+            continue
+        
+        # Добавляем сайт в список
+        domains.append(user_input)
+        line_number += 1
+    
+    # Проверяем, есть ли вообще сайты для проверки
+    if not domains:
+        print("\n❌ Ошибка: не введено ни одного сайта для проверки.")
         sys.exit(1)
     
-    # Разбиваем по пробелам
-    raw_domains = user_input.split()
-    
-    print("\n" + "-" * 70)
-    print("РЕЗУЛЬТАТЫ ПРОВЕРКИ:")
-    print("-" * 70)
+    print("\n" + "=" * 70)
+    print(f"НАЧАЛО ПРОВЕРКИ (всего сайтов: {len(domains)})")
+    print("=" * 70)
     
     results = []
     redirect_count = 0
-    total = len(raw_domains)
+    total = len(domains)
     
-    for idx, domain in enumerate(raw_domains, 1):
+    for idx, domain in enumerate(domains, 1):
         print(f"\n[{idx}/{total}] Проверка: {domain}")
         status, message, final_url = check_http_to_https_redirect(domain)
         print(f"  {message}")
@@ -94,7 +113,6 @@ def main():
             "final_url": final_url
         })
         
-        # Небольшая задержка между запросами
         time.sleep(0.5)
     
     # Вывод итоговой статистики
@@ -111,6 +129,16 @@ def main():
         print("\n⚠️ Некоторые сайты не перенаправляют на HTTPS. Рекомендуется исправить.")
     else:
         print("\n❌ Ни один сайт не перенаправляет с HTTP на HTTPS!")
+    
+    # Дополнительный вывод: список сайтов без редиректа
+    if redirect_count < total:
+        print("\n" + "-" * 70)
+        print("САЙТЫ БЕЗ РЕДИРЕКТА НА HTTPS:")
+        print("-" * 70)
+        for result in results:
+            if not result["has_redirect"]:
+                print(f"  • {result['original']}")
+                print(f"    {result['message']}")
     
     print("\n" + "=" * 70)
 
